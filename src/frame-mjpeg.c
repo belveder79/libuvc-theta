@@ -38,6 +38,7 @@
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
 #include <jpeglib.h>
+#include <jerror.h>
 #include <setjmp.h>
 
 extern uvc_error_t uvc_ensure_frame_size(uvc_frame_t *frame, size_t need_bytes);
@@ -55,19 +56,19 @@ static void _error_exit(j_common_ptr dinfo) {
 
 /* ISO/IEC 10918-1:1993(E) K.3.3. Default Huffman tables used by MJPEG UVC devices
    which don't specify a Huffman table in the JPEG stream. */
-static const unsigned char dc_lumi_len[] = 
+static const unsigned char dc_lumi_len[] =
   {0, 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
-static const unsigned char dc_lumi_val[] = 
+static const unsigned char dc_lumi_val[] =
   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
-static const unsigned char dc_chromi_len[] = 
+static const unsigned char dc_chromi_len[] =
   {0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0};
-static const unsigned char dc_chromi_val[] = 
+static const unsigned char dc_chromi_val[] =
   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
-static const unsigned char ac_lumi_len[] = 
+static const unsigned char ac_lumi_len[] =
   {0, 0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d};
-static const unsigned char ac_lumi_val[] = 
+static const unsigned char ac_lumi_val[] =
   {0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21,
    0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71,
    0x14, 0x32, 0x81, 0x91, 0xa1, 0x08, 0x23, 0x42, 0xb1,
@@ -86,9 +87,9 @@ static const unsigned char ac_lumi_val[] =
    0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2,
    0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1,
    0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa};
-static const unsigned char ac_chromi_len[] = 
+static const unsigned char ac_chromi_len[] =
   {0, 0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77};
-static const unsigned char ac_chromi_val[] = 
+static const unsigned char ac_chromi_val[] =
   {0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31,
    0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71, 0x13, 0x22,
    0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xa1, 0xb1, 0xc1,
@@ -120,6 +121,43 @@ static void insert_huff_tables(j_decompress_ptr dinfo) {
   COPY_HUFF_TABLE(dinfo, dc_huff_tbl_ptrs[1], dc_chromi);
   COPY_HUFF_TABLE(dinfo, ac_huff_tbl_ptrs[0], ac_lumi);
   COPY_HUFF_TABLE(dinfo, ac_huff_tbl_ptrs[1], ac_chromi);
+}
+
+/* Read JPEG image from a memory segment */
+static void init_source (j_decompress_ptr cinfo) {}
+static boolean fill_input_buffer (j_decompress_ptr cinfo)
+{
+    ERREXIT(cinfo, JERR_INPUT_EMPTY);
+return TRUE;
+}
+static void skip_input_data (j_decompress_ptr cinfo, long num_bytes)
+{
+    struct jpeg_source_mgr* src = (struct jpeg_source_mgr*) cinfo->src;
+
+    if (num_bytes > 0) {
+        src->next_input_byte += (size_t) num_bytes;
+        src->bytes_in_buffer -= (size_t) num_bytes;
+    }
+}
+static void term_source (j_decompress_ptr cinfo) {}
+static void jpeg_mem_src (j_decompress_ptr cinfo, void* buffer, long nbytes)
+{
+    struct jpeg_source_mgr* src;
+
+    if (cinfo->src == NULL) {   /* first time for this JPEG object? */
+        cinfo->src = (struct jpeg_source_mgr *)
+            (*cinfo->mem->alloc_small) ((j_common_ptr) cinfo, JPOOL_PERMANENT,
+            sizeof(struct jpeg_source_mgr));
+    }
+
+    src = (struct jpeg_source_mgr*) cinfo->src;
+    src->init_source = init_source;
+    src->fill_input_buffer = fill_input_buffer;
+    src->skip_input_data = skip_input_data;
+    src->resync_to_restart = jpeg_resync_to_restart; /* use default method */
+    src->term_source = term_source;
+    src->bytes_in_buffer = nbytes;
+    src->next_input_byte = (JOCTET*)buffer;
 }
 
 static uvc_error_t uvc_mjpeg_convert(uvc_frame_t *in, uvc_frame_t *out) {

@@ -9,11 +9,11 @@ void cb(uvc_frame_t *frame, void *ptr) {
   uvc_frame_t *bgr;
   uvc_error_t ret;
   enum uvc_frame_format *frame_format = (enum uvc_frame_format *)ptr;
-  /* FILE *fp;
-   * static int jpeg_count = 0;
-   * static const char *H264_FILE = "iOSDevLog.h264";
-   * static const char *MJPEG_FILE = ".jpeg";
-   * char filename[16]; */
+   FILE *fp;
+   // static int jpeg_count = 0;
+   static const char *H264_FILE = "iOSDevLog.h264";
+   // static const char *MJPEG_FILE = ".jpeg";
+   // char filename[16];
 
   /* We'll convert the image from YUV/JPEG to BGR, so allocate space */
   bgr = uvc_allocate_frame(frame->width * frame->height * 3);
@@ -28,9 +28,9 @@ void cb(uvc_frame_t *frame, void *ptr) {
   switch (frame->frame_format) {
   case UVC_FRAME_FORMAT_H264:
     /* use `ffplay H264_FILE` to play */
-    /* fp = fopen(H264_FILE, "a");
-     * fwrite(frame->data, 1, frame->data_bytes, fp);
-     * fclose(fp); */
+    fp = fopen(H264_FILE, "a");
+    fwrite(frame->data, 1, frame->data_bytes, fp);
+    fclose(fp);
     break;
   case UVC_COLOR_FORMAT_MJPEG:
     /* sprintf(filename, "%d%s", jpeg_count++, MJPEG_FILE);
@@ -65,13 +65,13 @@ void cb(uvc_frame_t *frame, void *ptr) {
    */
 
   /* Use opencv.highgui to display the image:
-   * 
+   *
    * cvImg = cvCreateImageHeader(
    *     cvSize(bgr->width, bgr->height),
    *     IPL_DEPTH_8U,
    *     3);
    *
-   * cvSetData(cvImg, bgr->data, bgr->width * 3); 
+   * cvSetData(cvImg, bgr->data, bgr->width * 3);
    *
    * cvNamedWindow("Test", CV_WINDOW_AUTOSIZE);
    * cvShowImage("Test", cvImg);
@@ -127,10 +127,10 @@ int main(int argc, char **argv) {
       const uvc_format_desc_t *format_desc = uvc_get_format_descs(devh);
       const uvc_frame_desc_t *frame_desc = format_desc->frame_descs;
       enum uvc_frame_format frame_format;
-      int width = 640;
-      int height = 480;
-      int fps = 30;
-
+      int width = 3840;
+      int height = 1920;
+      int fps = 29;
+/*
       switch (format_desc->bDescriptorSubtype) {
       case UVC_VS_FORMAT_MJPEG:
         frame_format = UVC_COLOR_FORMAT_MJPEG;
@@ -148,8 +148,10 @@ int main(int argc, char **argv) {
         height = frame_desc->wHeight;
         fps = 10000000 / frame_desc->dwDefaultFrameInterval;
       }
-
+*/
       printf("\nFirst format: (%4s) %dx%d %dfps\n", format_desc->fourccFormat, width, height, fps);
+
+      frame_format = UVC_FRAME_FORMAT_H264;
 
       /* Try to negotiate first stream profile */
       res = uvc_get_stream_ctrl_format_size(
@@ -161,9 +163,9 @@ int main(int argc, char **argv) {
       /* Print out the result */
       uvc_print_stream_ctrl(&ctrl, stderr);
 
-      if (res < 0) {
-        uvc_perror(res, "get_mode"); /* device doesn't provide a matching stream */
-      } else {
+//      if (res < 0) {
+//        uvc_perror(res, "get_mode"); /* device doesn't provide a matching stream */
+//      } else {
         /* Start the video stream. The library will call user function cb:
          *   cb(frame, (void *) 12345)
          */
@@ -182,7 +184,7 @@ int main(int argc, char **argv) {
           uvc_stop_streaming(devh);
           puts("Done streaming.");
         }
-      }
+//      }
 
       /* Release our handle on the device */
       uvc_close(devh);
@@ -200,4 +202,3 @@ int main(int argc, char **argv) {
 
   return 0;
 }
-
